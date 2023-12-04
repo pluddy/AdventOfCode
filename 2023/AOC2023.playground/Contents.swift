@@ -1,74 +1,58 @@
 import Foundation
 import RegexBuilder
 
-let partRegex = /(?<id>\d*)/
-let symbolRegex = /(?<symbol>[^\.\d])/
+let lineRegex = /Card +(?<id>\d+): (?<winning>[\d ]*) \| (?<chosen>[\d ]*)$/
+let numberRegex = /(?<number>\d*)/
 
-let lines = Day3.input.split(separator: "\n")
-
-class Part: Hashable {
+struct Card {
     let id: Int
-    let range: NSRange
-    let line: Int
+    let winningNumbers: Set<Int>
+    let chosenNumbers: Set<Int>
 
-    var adjacentSymbol: Symbol?
-
-    init(id: Int, range: NSRange, line: Int, adjacentSymbol: Symbol? = nil) {
-        self.id = id
-        self.range = range
-        self.line = line
-        self.adjacentSymbol = adjacentSymbol
+    var matches: Int {
+        chosenNumbers.intersection(winningNumbers).count
     }
 
-    static func == (lhs: Part, rhs: Part) -> Bool {
-        lhs.id == rhs.id
-    }
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-
-}
-
-class Symbol {
-    let symbol: String
-    let range: NSRange
-    let line: Int
-
-    var adjacentParts: Set<Part> = Set([])
-
-    init(symbol: String, range: NSRange, line: Int) {
-        self.symbol = symbol
-        self.range = range
-        self.line = line
-    }
-
-    var gearRatio: Int {
-        adjacentParts.reduce(1, { $0 * $1.id })
-    }
-}
-
-var parts: [Part] = []
-var symbols: [Symbol] = []
-for (index, line) in lines.enumerated() {
-    for match in line.matches(of: partRegex) {
-        guard let id = Int(match.output.id) else {
-            continue
-        }
-        parts.append(Part(id: id, range: NSRange(match.range, in: line), line: index))
-    }
-    for match in line.matches(of: symbolRegex) {
-        symbols.append(Symbol(symbol: String(match.output.symbol), range: NSRange(match.range, in: line), line: index))
-    }
-}
-
-for part in parts {
-    for symbol in symbols.filter({ ((part.line - 1)...(part.line + 1)).contains($0.line) }) {
-        if ((part.range.lowerBound - 1)..<(part.range.upperBound + 1)).contains(symbol.range.lowerBound) {
-            part.adjacentSymbol = symbol
-            symbol.adjacentParts.insert(part)
+    var points: Int {
+        switch matches {
+        case 0:
+            return 0
+        case 1:
+            return 1
+        default:
+            return Int(pow(2.0, Double(matches - 1)))
         }
     }
 }
 
-print(symbols.filter { $0.adjacentParts.count == 2 }.reduce(0, { $0 + $1.gearRatio }))
+let lines = Day4.input.split(separator: "\n")
+
+var cards: [Card] = []
+for line in lines {
+    guard let match = line.firstMatch(of: lineRegex),
+        let id = Int(match.output.id) else {
+        continue
+    }
+    let winning = match.output.winning
+        .matches(of: numberRegex)
+        .map(\.output.number)
+        .compactMap { Int($0) }
+    let chosen = match.output.chosen
+        .matches(of: numberRegex)
+        .map(\.output.number)
+        .compactMap { Int($0) }
+    let card = Card(id: id, winningNumbers: Set(winning), chosenNumbers: Set(chosen))
+    cards.append(card)
+}
+
+var repeats = Array(repeating: 0, count: cards.count)
+
+for (index, card) in cards.enumerated() where index + 1 < cards.endIndex {
+    for _ in 0...repeats[index] {
+        for repeatIndex in (index + 1)..<min((index + 1 + card.matches), cards.endIndex) {
+            repeats[repeatIndex] += 1
+        }
+    }
+}
+
+print(repeats.reduce(0, { $0 + $1 }) + cards.count)
